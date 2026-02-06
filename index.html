@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Model Viewer - GitHub Pages</title>
+    
+    <!-- ספריות -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            min-height: 100vh; 
+            color: white; 
+            padding: 20px; 
+        }
+        
+        .container { max-width: 900px; margin: 0 auto; }
+        
+        h1 { text-align: center; margin-bottom: 30px; font-size: 2.2em; }
+        
+        .card { 
+            background: rgba(255,255,255,0.1); 
+            border-radius: 20px; 
+            padding: 30px; 
+            backdrop-filter: blur(10px);
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .upload-zone {
+            border: 3px dashed rgba(255,255,255,0.4);
+            border-radius: 15px;
+            padding: 50px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-zone:hover, .upload-zone.dragover { 
+            background: rgba(255,255,255,0.2); 
+            border-color: white; 
+        }
+        
+        input[type="file"] { display: none; }
+        
+        .btn {
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            border: none;
+            padding: 15px 35px;
+            border-radius: 50px;
+            color: white;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.3s;
+            margin: 5px;
+            font-weight: bold;
+        }
+        
+        .btn:hover:not(:disabled) { transform: scale(1.05); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-ar { background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%); }
+        .btn-secondary { background: rgba(255,255,255,0.2); border: 2px solid white; }
+        
+        #preview-container, #view-container {
+            width: 100%;
+            height: 400px;
+            background: #000;
+            border-radius: 15px;
+            display: none;
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f093fb, #f5576c);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .qr-box { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 15px; 
+            display: inline-block; 
+            margin: 10px;
+        }
+        
+        .link-box {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 0.85em;
+            word-break: break-all;
+            cursor: pointer;
+            margin: 15px 0;
+            text-align: left;
+            direction: ltr;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .status.success { background: rgba(76, 175, 80, 0.3); display: block; }
+        .status.error { background: rgba(244, 67, 54, 0.3); display: block; }
+        .status.info { background: rgba(33, 150, 243, 0.3); display: block; }
+        
+        .hidden { display: none !important; }
+        
+        .file-info {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .loader {
+            display: none;
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        #ar-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: black;
+            z-index: 1000;
+        }
+        
+        .close-ar {
+            position: absolute;
+            top: 20px; right: 20px;
+            z-index: 1001;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+        }
+        
+        .tips {
+            font-size: 0.9em;
+            line-height: 1.8;
+            opacity: 0.9;
+        }
+        
+        .steps {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .step {
+            text-align: center;
+            opacity: 0.5;
+            padding: 10px;
+        }
+        
+        .step.active { opacity: 1; }
+        .step-number {
+            width: 40px; height: 40px;
+            background: white;
+            color: #764ba2;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin: 0 auto 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 AR Model Viewer</h1>
+        <div id="statusMsg" class="status"></div>
+
+        <!-- שלבים -->
+        <div class="steps">
+            <div class="step active" id="step1">
+                <div class="step-number">1</div>
+                <div>העלאה</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div>תצוגה</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div>שיתוף</div>
+            </div>
+        </div>
+
+        <!-- העלאה -->
+        <div id="uploadCard" class="card">
+            <div class="upload-zone" id="dropZone">
+                <h2>📦 בחר קובץ GLB</h2>
+                <p style="margin: 15px 0; opacity: 0.8;">
+                    גרור לכאן או לחץ לבחירה<br>
+                    <small>עד 100MB | נשמר ל-14 יום</small>
+                </p>
+                
+                <input type="file" id="fileInput" accept=".glb,.gltf" />
+                <button class="btn" onclick="document.getElementById('fileInput').click()">
+                    📁 בחר קובץ
+                </button>
+                
+                <div class="file-info" id="fileInfo">
+                    <strong id="fileName"></strong><br>
+                    <span id="fileSize"></span>
+                </div>
+                
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                
+                <div class="loader" id="loader"></div>
+                
+                <button class="btn" id="uploadBtn" style="display: none;" onclick="startUpload()">
+                    ⬆️ העלה וצור קישור
+                </button>
+            </div>
+        </div>
+
+        <!-- תוצאה -->
+        <div id="resultCard" class="card hidden">
+            <h2 style="margin-bottom: 20px; text-align: center;">✅ המודל מוכן!</h2>
+            
+            <div id="preview-container"></div>
+            
+            <div style="text-align: center;">
+                <div class="qr-box">
+                    <div id="qrcode"></div>
+                </div>
+                <p style="margin-top: 10px; font-size: 0.9em;">סרוק עם הנייד לצפייה ב-AR</p>
+            </div>
+            
+            <div class="link-box" id="shareLink" onclick="copyLink()">
+                לחץ להעתקת הקישור
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="copyLink()">📋 העתק</button>
+                <button class="btn btn-ar" onclick="openAR()">🥽 AR</button>
+                <button class="btn btn-secondary" onclick="location.reload()">🔄 חדש</button>
+            </div>
+        </div>
+
+        <!-- צפייה -->
+        <div id="viewCard" class="card hidden">
+            <h2 style="margin-bottom: 20px;">📱 מודל ששותף איתך</h2>
+            <div id="view-container"></div>
+            <div style="text-align: center; margin-top: 15px;">
+                <button class="btn btn-ar" onclick="openAR()">🥽 פתח ב-AR</button>
+                <button class="btn btn-secondary" onclick="location.href='.'">⬆️ העלה שלך</button>
+            </div>
+        </div>
+
+        <!-- טיפים -->
+        <div class="card tips">
+            <h3>💡 מידע חשוב:</h3>
+            <ul style="margin-top: 10px; padding-right: 20px;">
+                <li>הקבצים נשמרים ב-File.io (שירות אחסון חיצוני)</li>
+                <li>תוקף הקישור: 14 יום מההעלאה</li>
+                <li>מגבלת גודל: 100MB לקובץ</li>
+                <li>AR עובד ב-Chrome (Android) וב-Safari (iOS)</li>
+                <li>אין צורך בהרשמה או בשרת</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- AR -->
+    <div id="ar-overlay">
+        <button class="close-ar" onclick="closeAR()">✕ סגור</button>
+        <a-scene embedded arjs="sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;">
+            <a-marker preset="hiro">
+                <a-entity id="ar-model" position="0 0 0" scale="0.5 0.5 0.5" rotation="0 0 0"></a-entity>
+            </a-marker>
+            <a-entity camera></a-entity>
+        </a-scene>
+        <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: white; padding: 15px 25px; border-radius: 30px; z-index: 1001; text-align: center;">
+            📷 כוון את המצלמה למרקר Hiro או הקש על המסך
+        </div>
+    </div>
+
+    <script>
+        let currentFile = null;
+        let currentModelUrl = null;
+        let scene, camera, renderer, controls;
+
+        // בדיקת URL - אם יש model parameter, מצב צפייה
+        window.addEventListener('load', () => {
+            const params = new URLSearchParams(window.location.search);
+            const modelUrl = params.get('model');
+            
+            if (modelUrl) {
+                // מצב צפייה
+                showViewMode(decodeURIComponent(modelUrl));
+            } else {
+                // מצב העלאה
+                setupUpload();
+            }
+        });
+
+        function setupUpload() {
+            const dropZone = document.getElementById('dropZone');
+            
+            // Prevent defaults
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            // Highlight
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, unhighlight, false);
+            });
+            
+            // Handle drop
+            dropZone.addEventListener('drop', handleDrop, false);
+            
+            // Handle file input
+            document.getElementById('fileInput').addEventListener('change', handleFiles, false);
+        }
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function highlight(e) {
+            document.getElementById('dropZone').classList.add('dragover');
+        }
+
+        function unhighlight(e) {
+            document.getElementById('dropZone').classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles({ target: { files: files } });
+        }
+
+        function handleFiles(e) {
+            const files = e.target.files;
+            if (files.length === 0) return;
+            
+            const file = files[0];
+            
+            // בדיקת סוג הקובץ
+            if (!file.name.toLowerCase().endsWith('.glb') && !file.name.toLowerCase().endsWith('.gltf')) {
+                showStatus('❌ נא לבחור קובץ GLB או GLTF בלבד', 'error');
+                return;
+            }
+            
+            // בדיקת גודל
+            if (file.size > 100 * 1024 * 1024) {
+                showStatus('❌ הקובץ גדול מדי. מקסימום 100MB', 'error');
+                return;
+            }
+            
+            currentFile = file;
+            
+            // הצגת מידע
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = (file.size / (1024*1024)).toFixed(2) + ' MB';
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('uploadBtn').style.display = 'inline-block';
+            
+            // תצוגה מקדימה מקומית
+            const localUrl = URL.createObjectURL(file);
+            showPreview(localUrl, 'preview-container');
+            
+            showStatus('✅ קובץ נבחר! לחץ על "העלה וצור קישור"', 'success');
+        }
+
+        async function startUpload() {
+            if (!currentFile) return;
+            
+            const btn = document.getElementById('uploadBtn');
+            btn.disabled = true;
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('progressBar').style.display = 'block';
+            
+            try {
+                updateProgress(20);
+                
+                // העלאה ל-File.io
+                const formData = new FormData();
+                formData.append('file', currentFile);
+                formData.append('expires', '2w'); // 2 שבועות
+                
+                updateProgress(50);
+                
+                const response = await fetch('https://file.io', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                updateProgress(80);
+                
+                const data = await response.json();
+                
+                if (data.success && data.link) {
+                    finishUpload(data.link);
+                } else {
+                    throw new Error('Upload failed: ' + JSON.stringify(data));
+                }
+                
+            } catch (error) {
+                showStatus('❌ שגיאה בהעלאה: ' + error.message, 'error');
+                btn.disabled = false;
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('progressBar').style.display = 'none';
+            }
+        }
+
+        function finishUpload(url) {
+            currentModelUrl = url;
+            
+            document.getElementById('uploadCard').classList.add('hidden');
+            document.getElementById('resultCard').classList.remove('hidden');
+            document.getElementById('step2').classList.add('active');
+            document.getElementById('step3').classList.add('active');
+            
+            // יצירת קישור GitHub Pages
+            const shareUrl = `${window.location.origin}${window.location.pathname}?model=${encodeURIComponent(url)}`;
+            
+            document.getElementById('shareLink').textContent = shareUrl;
+            
+            // QR Code
+            document.getElementById('qrcode').innerHTML = '';
+            new QRCode(document.getElementById('qrcode'), {
+                text: shareUrl,
+                width: 180,
+                height: 180,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+            
+            // עדכון תצוגה מקדימה ל-URL האמיתי
+            showPreview(url, 'preview-container');
+            
+            // עדכון URL בלי ריענון
+            window.history.pushState({}, '', `?model=${encodeURIComponent(url)}`);
+            
+            showStatus('✅ הקובץ הועלה! הקישור תקף ל-14 יום', 'success');
+        }
+
+        function showViewMode(url) {
+            currentModelUrl = url;
+            document.getElementById('uploadCard').classList.add('hidden');
+            document.getElementById('resultCard').classList.add('hidden');
+            document.getElementById('viewCard').classList.remove('hidden');
+            document.getElementById('step1').classList.remove('active');
+            document.getElementById('step2').classList.add('active');
+            
+            showPreview(url, 'view-container');
+            showStatus('📦 טוען מודל...', 'info');
+        }
+
+        function showPreview(url, containerId) {
+            const container = document.getElementById(containerId);
+            container.style.display = 'block';
+            
+            // ניקוי קודם
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+            
+            // Three.js setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+            
+            camera = new THREE.PerspectiveCamera(45, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+            camera.position.set(0, 1, 3);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.offsetWidth, container.offsetHeight);
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.appendChild(renderer.domElement);
+            
+            // תאורה
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+            
+            const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+            fillLight.position.set(-5, 0, -5);
+            scene.add(fillLight);
+            
+            // שליטה
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 2;
+            
+            // טעינת מודל
+            const loader = new THREE.GLTFLoader();
+            
+            loader.load(url, (gltf) => {
+                const model = gltf.scene;
+                
+                // מרכוז וסקייל
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                
+                model.position.sub(center);
+                
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 2 / maxDim;
+                model.scale.setScalar(scale);
+                
+                scene.add(model);
+                
+                // אנימציה
+                function animate() {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                }
+                animate();
+                
+                showStatus('✅ המודל נטען בהצלחה!', 'success');
+                
+            }, (progress) => {
+                const percent = (progress.loaded / progress.total) * 100;
+                showStatus(`⏳ טוען... ${percent.toFixed(0)}%`, 'info');
+            }, (error) => {
+                showStatus('❌ שגיאה בטעינת המודל: ' + error.message, 'error');
+                console.error(error);
+            });
+        }
+
+        function openAR() {
+            if (!currentModelUrl) {
+                showStatus('❌ אין מודל לתצוגה', 'error');
+                return;
+            }
+            
+            document.getElementById('ar-overlay').style.display = 'block';
+            
+            const arModel = document.getElementById('ar-model');
+            arModel.setAttribute('gltf-model', currentModelUrl);
+            
+            // איפוס
+            arModel.setAttribute('scale', '0.5 0.5 0.5');
+            arModel.setAttribute('position', '0 0 0');
+        }
+
+        function closeAR() {
+            document.getElementById('ar-overlay').style.display = 'none';
+        }
+
+        function copyLink() {
+            const link = document.getElementById('shareLink').textContent;
+            navigator.clipboard.writeText(link).then(() => {
+                showStatus('✅ הקישור הועתק!', 'success');
+            }).catch(() => {
+                // Fallback
+                const textArea = document.createElement('textarea');
+                textArea.value = link;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showStatus('✅ הקישור הועתק!', 'success');
+            });
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('statusMsg');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 4000);
+            }
+        }
+
+        // התאמת גודל
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                const containers = ['preview-container', 'view-container'];
+                containers.forEach(id => {
+                    const container = document.getElementById(id);
+                    if (container && container.offsetWidth > 0 && container.style.display !== 'none') {
+                        camera.aspect = container.offsetWidth / container.offsetHeight;
+                        camera.updateProjectionMatrix();
+                        renderer.setSize(container.offsetWidth, container.offsetHeight);
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
